@@ -1,0 +1,44 @@
+# Omedia's release of this fork: upstream main, tagged v<next>-omedia.<n>,
+# until upstream publishes the release that carries it. Why the fork exists:
+# Omedia/omedia-hosting docs/decisions.md 2026-10-01 (v0.20.0 needs
+# Datastore.Allocate to read a shared storage's config; main does not).
+# Only the two images the cluster runs, amd64 only (Grena's nodes), signed
+# keyless like upstream's. Upstream's own workflows are disabled in the fork.
+name: Omedia release
+on:
+  push:
+    tags: ["v*-omedia.*"]
+jobs:
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    env:
+      USERNAME: omedia # ghcr.io/omedia: image names must be lowercase
+      TAG: ${{ github.ref_name }}
+      PUSH: "true"
+      PLATFORM: linux/amd64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Set up docker buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Github registry login
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        run: make image-proxmox-csi-controller image-proxmox-csi-node
+      - name: Sign images
+        run: |
+          cosign sign --yes --recursive ghcr.io/omedia/proxmox-csi-controller:$TAG
+          cosign sign --yes --recursive ghcr.io/omedia/proxmox-csi-node:$TAG
