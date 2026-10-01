@@ -218,9 +218,9 @@ func (d *ControllerService) CreateVolume(ctx context.Context, request *csi.Creat
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	storageConfig, err := cl.Storage().Get(ctx, params.StorageID)
+	storageConfig, err := getStorageConfig(ctx, cl, params.StorageID)
 	if err != nil {
-		if proxmoxrest.IsNotFound(err) {
+		if proxmoxrest.IsNotFound(err) || errors.Is(err, errStorageNotFound) {
 			return nil, status.Error(codes.NotFound, fmt.Sprintf("proxmox storage config %s not found", params.StorageID))
 		}
 
@@ -268,7 +268,7 @@ func (d *ControllerService) CreateVolume(ctx context.Context, request *csi.Creat
 			return nil, status.Error(codes.Internal, "error: shared storage type cifs, pbs are not supported")
 		}
 
-		config, err := cl.Storage().Get(ctx, params.StorageID)
+		config, err := getStorageConfig(ctx, cl, params.StorageID)
 		if err != nil {
 			klog.ErrorS(err, "CreateVolume: failed to get proxmox storage config", "cluster", region, "storageID", params.StorageID)
 
@@ -845,7 +845,7 @@ func (d *ControllerService) CreateSnapshot(ctx context.Context, request *csi.Cre
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	storageConfig, err := cl.Storage().Get(ctx, vol.Storage())
+	storageConfig, err := getStorageConfig(ctx, cl, vol.Storage())
 	if err != nil {
 		klog.ErrorS(err, "CreateSnapshot: failed to get proxmox storage config", "cluster", vol.Cluster(), "storageID", vol.Storage())
 

@@ -35,6 +35,7 @@ import (
 	"github.com/sergelogvinov/go-proxmox-rest/nodes/qemu"
 	"github.com/sergelogvinov/go-proxmox-rest/nodes/storage"
 	"github.com/sergelogvinov/go-proxmox-rest/nodes/tasks"
+	pxstorage "github.com/sergelogvinov/go-proxmox-rest/storage"
 	"github.com/sergelogvinov/proxmox-csi-plugin/pkg/metrics"
 	volume "github.com/sergelogvinov/proxmox-csi-plugin/pkg/utils/volume"
 
@@ -59,6 +60,31 @@ const (
 // this package keeps one so call sites can distinguish "not published"/"already
 // gone" from a real API error, the same way they could against the legacy client.
 var errVirtualMachineNotFound = errors.New("virtual machine not found")
+
+// errStorageNotFound indicates that the storage is not in the caller's
+// storage list: absent, or invisible to the token.
+var errStorageNotFound = errors.New("storage not found")
+
+// getStorageConfig returns a storage's cluster configuration from the storage
+// list (GET /storage), which Proxmox serves for Datastore.Audit or
+// Datastore.AllocateSpace on the storage. GET /storage/{storage} needs
+// Datastore.Allocate - the right to delete any volume on it - which an
+// operator of a shared storage need not grant to a token that only creates
+// and attaches volumes.
+func getStorageConfig(ctx context.Context, cl *proxmoxrest.Client, storageID string) (*pxstorage.Storage, error) {
+	storages, err := cl.Storage().List(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range storages {
+		if storages[i].ID == storageID {
+			return &storages[i], nil
+		}
+	}
+
+	return nil, errStorageNotFound
+}
 
 // findVMNode resolves the Proxmox node a guest currently runs on from its VMID.
 func findVMNode(ctx context.Context, cl *proxmoxrest.Client, vmid int) (string, error) {
